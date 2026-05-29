@@ -1,0 +1,590 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: liontech-finance
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: liontech-finance-secrets
+  namespace: liontech-finance
+type: Opaque
+stringData:
+  AUTH_SECRET: change-this-liontech-finance-auth-secret
+  SERVICE_TOKEN: change-this-liontech-finance-service-token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: liontech-finance
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: docker.io/liontechdevopsstudents/liontech-finance-frontend:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: liontech-finance
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: liontech-finance
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: docker.io/liontechdevopsstudents/liontech-finance-gateway:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "8080"
+            - name: AUTH_SERVICE_URL
+              value: http://auth-service:3000
+            - name: PROFILE_SERVICE_URL
+              value: http://profile-service:3000
+            - name: ACCOUNTS_SERVICE_URL
+              value: http://accounts-service:3000
+            - name: BALANCER_SERVICE_URL
+              value: http://balancer-service:3000
+            - name: NOTIFICATIONS_SERVICE_URL
+              value: http://notifications-service:3000
+            - name: DEPOSITS_SERVICE_URL
+              value: http://deposits-service:3000
+            - name: TRANSFERS_SERVICE_URL
+              value: http://transfers-service:3000
+            - name: ANALYTICS_SERVICE_URL
+              value: http://analytics-service:3000
+            - name: AI_SERVICE_URL
+              value: http://ai-service:3000
+            - name: ADMIN_SERVICE_URL
+              value: http://admin-service:3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: liontech-finance
+spec:
+  type: LoadBalancer
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-auth:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATA_FILE
+              value: /data/auth.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profile-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: profile-service
+  template:
+    metadata:
+      labels:
+        app: profile-service
+    spec:
+      containers:
+        - name: profile-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-profile:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATA_FILE
+              value: /data/profile.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: profile-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: profile-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounts-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accounts-service
+  template:
+    metadata:
+      labels:
+        app: accounts-service
+    spec:
+      containers:
+        - name: accounts-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-accounts:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATA_FILE
+              value: /data/accounts.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounts-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: accounts-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balancer-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: balancer-service
+  template:
+    metadata:
+      labels:
+        app: balancer-service
+    spec:
+      containers:
+        - name: balancer-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-balancer:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: ACCOUNTS_SERVICE_URL
+              value: http://accounts-service:3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: balancer-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: balancer-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notifications-service
+  template:
+    metadata:
+      labels:
+        app: notifications-service
+    spec:
+      containers:
+        - name: notifications-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-notifications:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATA_FILE
+              value: /data/notifications.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifications-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: notifications-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deposits-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deposits-service
+  template:
+    metadata:
+      labels:
+        app: deposits-service
+    spec:
+      containers:
+        - name: deposits-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-deposits:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATA_FILE
+              value: /data/deposits.json
+            - name: ACCOUNTS_SERVICE_URL
+              value: http://accounts-service:3000
+            - name: NOTIFICATIONS_SERVICE_URL
+              value: http://notifications-service:3000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deposits-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: deposits-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transfers-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transfers-service
+  template:
+    metadata:
+      labels:
+        app: transfers-service
+    spec:
+      containers:
+        - name: transfers-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-transfers:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATA_FILE
+              value: /data/transfers.json
+            - name: ACCOUNTS_SERVICE_URL
+              value: http://accounts-service:3000
+            - name: NOTIFICATIONS_SERVICE_URL
+              value: http://notifications-service:3000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transfers-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: transfers-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-service
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+    spec:
+      containers:
+        - name: analytics-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-analytics:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: AUTH_SERVICE_URL
+              value: http://auth-service:3000
+            - name: ACCOUNTS_SERVICE_URL
+              value: http://accounts-service:3000
+            - name: DEPOSITS_SERVICE_URL
+              value: http://deposits-service:3000
+            - name: TRANSFERS_SERVICE_URL
+              value: http://transfers-service:3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: analytics-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+    spec:
+      containers:
+        - name: ai-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-ai:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: ANALYTICS_SERVICE_URL
+              value: http://analytics-service:3000
+            - name: BALANCER_SERVICE_URL
+              value: http://balancer-service:3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: ai-service
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-service
+  namespace: liontech-finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-service
+  template:
+    metadata:
+      labels:
+        app: admin-service
+    spec:
+      containers:
+        - name: admin-service
+          image: docker.io/liontechdevopsstudents/liontech-finance-admin:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: liontech-finance-secrets
+          env:
+            - name: PORT
+              value: "3000"
+            - name: AUTH_SERVICE_URL
+              value: http://auth-service:3000
+            - name: PROFILE_SERVICE_URL
+              value: http://profile-service:3000
+            - name: TRANSFERS_SERVICE_URL
+              value: http://transfers-service:3000
+            - name: ANALYTICS_SERVICE_URL
+              value: http://analytics-service:3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-service
+  namespace: liontech-finance
+spec:
+  selector:
+    app: admin-service
+  ports:
+    - port: 3000
+      targetPort: 3000

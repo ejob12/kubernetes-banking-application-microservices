@@ -1,0 +1,5 @@
+.smoke-data/
+.dev-data/
+data/
+*.log
+*.pid

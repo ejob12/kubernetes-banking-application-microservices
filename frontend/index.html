@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LionTech Finance</title>
+    <meta
+      name="description"
+      content="LionTech Finance digital banking microservices application built by LionTech DevOps Students."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <main id="auth-screen" class="auth-screen">
+      <section class="brand-panel">
+        <img src="assets/liontech-logo.jpeg" alt="LionTech Finance logo" class="brand-logo" />
+        <div class="brand-copy">
+          <p class="eyebrow">Private digital banking</p>
+          <h1>LionTech Finance</h1>
+          <p>Modern accounts, secure transfers, portfolio intelligence, and admin-grade operational visibility.</p>
+        </div>
+        <img src="assets/liontech-client-handshake.webp" alt="LionTech client banking meeting" class="brand-photo" />
+      </section>
+
+      <section class="auth-panel" aria-label="Authentication">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-auth-tab="login" type="button">Login</button>
+          <button class="auth-tab" data-auth-tab="register" type="button">Create account</button>
+        </div>
+
+        <form id="login-form" class="auth-form">
+          <label>
+            Email
+            <input name="email" type="email" value="demo@liontech.finance" autocomplete="email" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" value="Liontech@123" autocomplete="current-password" required />
+          </label>
+          <button class="primary-button" type="submit">Enter banking</button>
+          <button class="secondary-button" id="admin-login" type="button">Admin access</button>
+        </form>
+
+        <form id="register-form" class="auth-form hidden">
+          <label>
+            Full legal name
+            <input name="name" type="text" autocomplete="name" required />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            Phone
+            <input name="phone" type="tel" autocomplete="tel" required />
+          </label>
+          <label>
+            Address
+            <input name="address" type="text" autocomplete="street-address" required />
+          </label>
+          <label>
+            Country
+            <input name="country" type="text" value="United States" autocomplete="country-name" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" minlength="8" autocomplete="new-password" required />
+          </label>
+          <button class="primary-button" type="submit">Open profile</button>
+        </form>
+      </section>
+    </main>
+
+    <div id="app-shell" class="app-shell hidden">
+      <aside class="sidebar">
+        <a class="bank-mark" href="#overview" data-view-link="overview">
+          <img src="assets/liontech-logo.jpeg" alt="LionTech Finance logo" />
+          <span>LionTech Finance</span>
+        </a>
+        <nav class="nav-list" aria-label="Primary navigation">
+          <button class="nav-item active" data-view-link="overview" type="button">Overview</button>
+          <button class="nav-item" data-view-link="profile" type="button">Profile</button>
+          <button class="nav-item" data-view-link="accounts" type="button">Accounts</button>
+          <button class="nav-item" data-view-link="deposits" type="button">Deposits</button>
+          <button class="nav-item" data-view-link="transfers" type="button">Transfers</button>
+          <button class="nav-item" data-view-link="ai" type="button">AI</button>
+          <button class="nav-item admin-only hidden" data-view-link="admin" type="button">Admin</button>
+        </nav>
+        <img src="assets/liontech-devops-banking.jpg" alt="LionTech DevOps banking platform" class="sidebar-image" />
+        <p class="copyright">© 2026 LionTech Finance. Built by LionTech DevOps Students.</p>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Secure banking portal</p>
+            <h2 id="welcome-title">Welcome</h2>
+          </div>
+          <div class="topbar-actions">
+            <span id="kyc-pill" class="status-pill">KYC pending</span>
+            <button class="secondary-button compact" id="refresh-data" type="button">Refresh</button>
+            <button class="ghost-button compact" id="logout" type="button">Logout</button>
+          </div>
+        </header>
+
+        <section id="view-overview" class="view active">
+          <div class="hero-strip">
+            <div>
+              <p class="eyebrow">Total relationship balance</p>
+              <h3 id="total-balance">$0.00</h3>
+              <p id="portfolio-message">Portfolio data loading.</p>
+            </div>
+            <img src="assets/liontech-finance-hero.webp" alt="LionTech Finance banking operations" />
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card">
+              <span>Accounts</span>
+              <strong id="metric-accounts">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Deposits</span>
+              <strong id="metric-deposits">$0.00</strong>
+            </article>
+            <article class="metric-card">
+              <span>Transfers</span>
+              <strong id="metric-transfers">$0.00</strong>
+            </article>
+            <article class="metric-card">
+              <span>Liquidity</span>
+              <strong id="metric-liquidity">0/100</strong>
+            </article>
+          </div>
+
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Accounts</h3>
+                <button class="text-button" data-view-link="accounts" type="button">Open new</button>
+              </div>
+              <div id="account-list" class="account-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>AI insights</h3>
+                <button class="text-button" data-view-link="ai" type="button">Ask AI</button>
+              </div>
+              <div id="insight-list" class="insight-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-profile" class="view">
+          <section class="panel wide-panel">
+            <div class="panel-heading">
+              <h3>Customer profile</h3>
+              <span id="profile-status" class="status-pill">pending</span>
+            </div>
+            <form id="profile-form" class="form-grid">
+              <label>Legal name<input name="legalName" required /></label>
+              <label>Preferred name<input name="preferredName" /></label>
+              <label>Date of birth<input name="dateOfBirth" type="date" /></label>
+              <label>Phone<input name="phone" required /></label>
+              <label>Address<input name="address" required /></label>
+              <label>Country<input name="country" required /></label>
+              <label>Occupation<input name="occupation" /></label>
+              <label>Employer<input name="employer" /></label>
+              <button class="primary-button form-action" type="submit">Save profile</button>
+            </form>
+          </section>
+        </section>
+
+        <section id="view-accounts" class="view">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Create account</h3>
+                <span class="status-pill">saving · current · investment</span>
+              </div>
+              <form id="account-form" class="stacked-form">
+                <label>
+                  Account type
+                  <select name="type" required>
+                    <option value="saving">Saving</option>
+                    <option value="current">Current</option>
+                    <option value="investment">Investment</option>
+                  </select>
+                </label>
+                <label>Nickname<input name="nickname" placeholder="Emergency reserve" /></label>
+                <label>Opening deposit<input name="initialDeposit" type="number" min="0" step="0.01" value="100" /></label>
+                <button class="primary-button" type="submit">Create account</button>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Account book</h3>
+              </div>
+              <div id="account-book" class="account-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-deposits" class="view">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>New deposit</h3>
+              </div>
+              <form id="deposit-form" class="stacked-form">
+                <label>Account<select name="accountId" data-account-select required></select></label>
+                <label>Amount<input name="amount" type="number" min="1" step="0.01" value="250" required /></label>
+                <label>
+                  Method
+                  <select name="method">
+                    <option value="mobile-check">Mobile check</option>
+                    <option value="cash-counter">Cash counter</option>
+                    <option value="wire-credit">Wire credit</option>
+                    <option value="payroll">Payroll</option>
+                  </select>
+                </label>
+                <label>Note<input name="note" placeholder="Payroll top-up" /></label>
+                <button class="primary-button" type="submit">Post deposit</button>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Deposit history</h3>
+              </div>
+              <div id="deposit-list" class="activity-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-transfers" class="view">
+          <div class="transfer-grid">
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>E-transfer</h3>
+              </div>
+              <form id="etransfer-form" class="stacked-form">
+                <label>From<select name="fromAccountId" data-account-select required></select></label>
+                <label>Recipient name<input name="recipientName" value="LionTech Supplies" required /></label>
+                <label>Recipient email<input name="recipientEmail" type="email" value="billing@liontech.example" required /></label>
+                <label>Amount<input name="amount" type="number" min="1" step="0.01" value="75" required /></label>
+                <label>Note<input name="note" value="Invoice payment" /></label>
+                <button class="primary-button" type="submit">Send e-transfer</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>International transfer</h3>
+              </div>
+              <form id="international-form" class="stacked-form">
+                <label>From<select name="fromAccountId" data-account-select required></select></label>
+                <label>Beneficiary<input name="beneficiaryName" value="Global Partner" required /></label>
+                <label>Bank<input name="beneficiaryBank" value="International Trust Bank" required /></label>
+                <label>SWIFT / IBAN<input name="ibanSwift" value="ITBKUS33" required /></label>
+                <label>Country<input name="country" value="Canada" required /></label>
+                <label>Currency<input name="targetCurrency" value="CAD" maxlength="3" required /></label>
+                <label>Amount<input name="amount" type="number" min="1" step="0.01" value="500" required /></label>
+                <button class="primary-button" type="submit">Submit transfer</button>
+              </form>
+            </section>
+
+            <section class="panel transfer-history">
+              <div class="panel-heading">
+                <h3>Transfer history</h3>
+              </div>
+              <div id="transfer-list" class="activity-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-ai" class="view">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Banking assistant</h3>
+                <span class="status-pill">AI service</span>
+              </div>
+              <form id="ai-form" class="stacked-form">
+                <label>
+                  Message
+                  <textarea name="message" rows="5">How should I balance saving and investment accounts?</textarea>
+                </label>
+                <button class="primary-button" type="submit">Ask LionTech AI</button>
+              </form>
+              <div id="ai-answer" class="ai-answer"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>Notifications</h3>
+              </div>
+              <div id="notification-list" class="activity-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-admin" class="view">
+          <section class="panel wide-panel">
+            <div class="panel-heading">
+              <h3>Admin dashboard</h3>
+              <span class="status-pill">Operations</span>
+            </div>
+            <div id="admin-metrics" class="metric-grid compact-grid"></div>
+            <div class="admin-columns">
+              <div>
+                <h4>Customers</h4>
+                <div id="admin-customers" class="activity-list"></div>
+              </div>
+              <div>
+                <h4>Risk reviews</h4>
+                <div id="admin-risk" class="activity-list"></div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

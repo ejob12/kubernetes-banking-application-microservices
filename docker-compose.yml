@@ -1,0 +1,200 @@
+name: liontech-finance
+
+x-common-env: &common-env
+  AUTH_SECRET: ${AUTH_SECRET:-liontech-finance-dev-secret-change-me}
+  SERVICE_TOKEN: ${SERVICE_TOKEN:-liontech-finance-service-token-change-me}
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-frontend:${IMAGE_TAG:-1.0.0}
+    depends_on:
+      - api-gateway
+    ports:
+      - "8090:80"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-gateway:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:3000
+      PROFILE_SERVICE_URL: http://profile-service:3000
+      ACCOUNTS_SERVICE_URL: http://accounts-service:3000
+      BALANCER_SERVICE_URL: http://balancer-service:3000
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:3000
+      DEPOSITS_SERVICE_URL: http://deposits-service:3000
+      TRANSFERS_SERVICE_URL: http://transfers-service:3000
+      ANALYTICS_SERVICE_URL: http://analytics-service:3000
+      AI_SERVICE_URL: http://ai-service:3000
+      ADMIN_SERVICE_URL: http://admin-service:3000
+    depends_on:
+      - auth-service
+      - profile-service
+      - accounts-service
+      - balancer-service
+      - notifications-service
+      - deposits-service
+      - transfers-service
+      - analytics-service
+      - ai-service
+      - admin-service
+    ports:
+      - "8091:8080"
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-auth:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      DATA_FILE: /data/auth.json
+    volumes:
+      - auth-data:/data
+
+  profile-service:
+    build:
+      context: .
+      dockerfile: services/profile/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-profile:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      DATA_FILE: /data/profile.json
+    volumes:
+      - profile-data:/data
+
+  accounts-service:
+    build:
+      context: .
+      dockerfile: services/accounts/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-accounts:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      DATA_FILE: /data/accounts.json
+    volumes:
+      - accounts-data:/data
+
+  balancer-service:
+    build:
+      context: .
+      dockerfile: services/balancer/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-balancer:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      ACCOUNTS_SERVICE_URL: http://accounts-service:3000
+    depends_on:
+      - accounts-service
+
+  notifications-service:
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-notifications:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      DATA_FILE: /data/notifications.json
+    volumes:
+      - notifications-data:/data
+
+  deposits-service:
+    build:
+      context: .
+      dockerfile: services/deposits/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-deposits:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      DATA_FILE: /data/deposits.json
+      ACCOUNTS_SERVICE_URL: http://accounts-service:3000
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:3000
+    depends_on:
+      - accounts-service
+      - notifications-service
+    volumes:
+      - deposits-data:/data
+
+  transfers-service:
+    build:
+      context: .
+      dockerfile: services/transfers/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-transfers:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      DATA_FILE: /data/transfers.json
+      ACCOUNTS_SERVICE_URL: http://accounts-service:3000
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:3000
+    depends_on:
+      - accounts-service
+      - notifications-service
+    volumes:
+      - transfers-data:/data
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-analytics:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:3000
+      ACCOUNTS_SERVICE_URL: http://accounts-service:3000
+      DEPOSITS_SERVICE_URL: http://deposits-service:3000
+      TRANSFERS_SERVICE_URL: http://transfers-service:3000
+    depends_on:
+      - auth-service
+      - accounts-service
+      - deposits-service
+      - transfers-service
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-ai:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      ANALYTICS_SERVICE_URL: http://analytics-service:3000
+      BALANCER_SERVICE_URL: http://balancer-service:3000
+    depends_on:
+      - analytics-service
+      - balancer-service
+
+  admin-service:
+    build:
+      context: .
+      dockerfile: services/admin/Dockerfile
+    image: ${DOCKERHUB_NAMESPACE:-liontechdevopsstudents}/liontech-finance-admin:${IMAGE_TAG:-1.0.0}
+    environment:
+      <<: *common-env
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:3000
+      PROFILE_SERVICE_URL: http://profile-service:3000
+      TRANSFERS_SERVICE_URL: http://transfers-service:3000
+      ANALYTICS_SERVICE_URL: http://analytics-service:3000
+    depends_on:
+      - auth-service
+      - profile-service
+      - transfers-service
+      - analytics-service
+
+volumes:
+  auth-data:
+  profile-data:
+  accounts-data:
+  notifications-data:
+  deposits-data:
+  transfers-data:
