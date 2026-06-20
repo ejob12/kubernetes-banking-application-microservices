@@ -8,10 +8,6 @@ pipeline {
     timestamps()
   }
 
-  tools {
-    git 'Default'   // ✅ Explicitly tell Jenkins to use the configured Git tool
-  }
-
   environment {
     APP_NAME = 'liontech-finance'
     KUBE_NAMESPACE = 'liontech-finance'
@@ -33,7 +29,6 @@ pipeline {
         script {
           env.PROJECT_DIR = fileExists('liontech-finance/docker-compose.yml') ? 'liontech-finance' : '.'
           def shortCommit = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
-          // ✅ Ensure IMAGE_TAG is set correctly
           env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
         }
         echo "Building ${env.APP_NAME} from ${env.PROJECT_DIR} with image tag ${env.IMAGE_TAG}"
@@ -42,7 +37,6 @@ pipeline {
 
     stage('Docker Login') {
       steps {
-        // ✅ Added explicit DockerHub login stage before building images
         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_TOKEN')]) {
           sh '''
             echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USER" --password-stdin
