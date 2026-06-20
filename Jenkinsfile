@@ -1,6 +1,10 @@
 pipeline {
   agent any
 
+  tools {
+    git 'git'   // ✅ Matches the Git installation you configured in Jenkins
+  }
+
   options {
     ansiColor('xterm')
     buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -27,15 +31,18 @@ pipeline {
     stage('Prepare') {
       steps {
         script {
+          // ✅ Run git inside the workspace to ensure IMAGE_TAG is set
+          dir("${env.WORKSPACE}") {
+            def shortCommit = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+            env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
+          }
+
           // ✅ Ensure PROJECT_DIR is always valid
           if (fileExists('liontech-finance/docker-compose.yml')) {
             env.PROJECT_DIR = 'liontech-finance'
           } else {
             env.PROJECT_DIR = '.'
           }
-
-          def shortCommit = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
-          env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
 
           if (!env.IMAGE_TAG?.trim()) {
             error("IMAGE_TAG was not set. Aborting pipeline.")
