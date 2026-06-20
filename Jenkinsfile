@@ -14,7 +14,7 @@ pipeline {
     DOCKERHUB_NAMESPACE = 'ejob12'
     IMAGE_TAG = ''
     K8S_MANIFEST = 'k8s/liontech-finance.yaml'
-    PROJECT_DIR = ''
+    PROJECT_DIR = '.'
   }
 
   stages {
@@ -27,9 +27,19 @@ pipeline {
     stage('Prepare') {
       steps {
         script {
-          env.PROJECT_DIR = fileExists('liontech-finance/docker-compose.yml') ? 'liontech-finance' : '.'
+          // ✅ Ensure PROJECT_DIR is always valid
+          if (fileExists('liontech-finance/docker-compose.yml')) {
+            env.PROJECT_DIR = 'liontech-finance'
+          } else {
+            env.PROJECT_DIR = '.'
+          }
+
           def shortCommit = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
           env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
+
+          if (!env.IMAGE_TAG?.trim()) {
+            error("IMAGE_TAG was not set. Aborting pipeline.")
+          }
         }
         echo "Building ${env.APP_NAME} from ${env.PROJECT_DIR} with image tag ${env.IMAGE_TAG}"
       }
@@ -75,18 +85,9 @@ pipeline {
         dir(env.PROJECT_DIR) {
           sh '''
             set -eu
-            docker build -f frontend/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-frontend:$IMAGE_TAG .
-            docker build -f gateway/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-gateway:$IMAGE_TAG .
-            docker build -f services/auth/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-auth:$IMAGE_TAG .
-            docker build -f services/profile/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-profile:$IMAGE_TAG .
-            docker build -f services/accounts/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-accounts:$IMAGE_TAG .
-            docker build -f services/balancer/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-balancer:$IMAGE_TAG .
-            docker build -f services/notifications/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-notifications:$IMAGE_TAG .
-            docker build -f services/deposits/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-deposits:$IMAGE_TAG .
-            docker build -f services/transfers/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-transfers:$IMAGE_TAG .
-            docker build -f services/analytics/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-analytics:$IMAGE_TAG .
-            docker build -f services/ai/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-ai:$IMAGE_TAG .
-            docker build -f services/admin/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-admin:$IMAGE_TAG .
+            for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+              docker build -f $image/Dockerfile -t docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-$image:$IMAGE_TAG .
+            done
           '''
         }
       }
