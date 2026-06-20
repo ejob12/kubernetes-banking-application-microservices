@@ -8,6 +8,10 @@ pipeline {
     timestamps()
   }
 
+  tools {
+    git 'Default'   // ✅ Explicitly tell Jenkins to use the configured Git tool
+  }
+
   environment {
     APP_NAME = 'liontech-finance'
     KUBE_NAMESPACE = 'liontech-finance'
@@ -29,9 +33,21 @@ pipeline {
         script {
           env.PROJECT_DIR = fileExists('liontech-finance/docker-compose.yml') ? 'liontech-finance' : '.'
           def shortCommit = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+          // ✅ Ensure IMAGE_TAG is set correctly
           env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
         }
         echo "Building ${env.APP_NAME} from ${env.PROJECT_DIR} with image tag ${env.IMAGE_TAG}"
+      }
+    }
+
+    stage('Docker Login') {
+      steps {
+        // ✅ Added explicit DockerHub login stage before building images
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_TOKEN')]) {
+          sh '''
+            echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USER" --password-stdin
+          '''
+        }
       }
     }
 
@@ -97,18 +113,14 @@ pipeline {
 
     stage('Push Images') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_TOKEN')]) {
-          dir(env.PROJECT_DIR) {
-            sh '''
-              set -eu
-              echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USER" --password-stdin
-              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-                docker push docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-$image:$IMAGE_TAG
-                docker push docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-$image:latest
-              done
-              docker logout docker.io
-            '''
-          }
+        dir(env.PROJECT_DIR) {
+          sh '''
+            set -eu
+            for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+              docker push docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-$image:$IMAGE_TAG
+              docker push docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-$image:latest
+            done
+          '''
         }
       }
     }
@@ -133,43 +145,9 @@ pipeline {
                 --from-literal=SERVICE_TOKEN="$SERVICE_TOKEN" \
                 --dry-run=client -o yaml | kubectl apply -f -
 
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/frontend \
-                frontend=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-frontend:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/api-gateway \
-                api-gateway=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-gateway:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/auth-service \
-                auth-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-auth:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/profile-service \
-                profile-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-profile:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/accounts-service \
-                accounts-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-accounts:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/balancer-service \
-                balancer-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-balancer:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/notifications-service \
-                notifications-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-notifications:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/deposits-service \
-                deposits-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-deposits:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/transfers-service \
-                transfers-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-transfers:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/analytics-service \
-                analytics-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-analytics:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/ai-service \
-                ai-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-ai:$IMAGE_TAG
-              kubectl -n "$KUBE_NAMESPACE" set image deployment/admin-service \
-                admin-service=docker.io/$DOCKERHUB_NAMESPACE/liontech-finance-admin:$IMAGE_TAG
-
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/frontend --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/api-gateway --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/auth-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/profile-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/accounts-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/balancer-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/notifications-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/deposits-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/transfers-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/analytics-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/ai-service --timeout=180s
-              kubectl -n "$KUBE_NAMESPACE" rollout status deployment/admin-service --timeout=180s
+              for svc in frontend api-gateway auth-service profile-service accounts-service balancer-service notifications-service deposits-service transfers-service analytics-service ai-service admin-service; do
+                kubectl -n "$KUBE_NAMESPACE" rollout status deployment/$svc --timeout=180s
+              done
 
               kubectl -n "$KUBE_NAMESPACE" get svc
             '''
