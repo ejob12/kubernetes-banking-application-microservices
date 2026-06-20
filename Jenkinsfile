@@ -11,7 +11,7 @@ pipeline {
   environment {
     APP_NAME = 'liontech-finance'
     KUBE_NAMESPACE = 'liontech-finance'
-    DOCKERHUB_NAMESPACE = 'liontechdevopsstudents'
+    DOCKERHUB_NAMESPACE = 'ejob12'
     IMAGE_TAG = ''
     K8S_MANIFEST = 'k8s/liontech-finance.yaml'
     PROJECT_DIR = ''
