@@ -162,49 +162,27 @@ stage('Prepare Build') {
             }
 
         }
-        stage('ECR Login') {
+       stage('ECR Login') {
 
-            steps {
+    steps {
 
-                withCredentials([
+        withAWS(credentials: 'aws-credentials',
+                region: "${AWS_REGION}") {
 
-                    amazonWebServices(credentialsId: 'aws-credentials')
+            sh '''
+            echo "Logging into Amazon ECR..."
 
-                ]) {
+            aws sts get-caller-identity
 
-                    sh '''
-
-                    set -eu
-
-                    echo "==========================================="
-
-                    echo "VERIFYING AWS CREDENTIALS"
-
-                    echo "==========================================="
-
-                    aws sts get-caller-identity
-
-                    echo ""
-
-                    echo "==========================================="
-
-                    echo "LOGGING INTO AMAZON ECR"
-
-                    echo "==========================================="
-
-                    aws ecr get-login-password \
-                    --region ${AWS_REGION} | \
-                    docker login \
-                    --username AWS \
-                    --password-stdin ${ECR_REGISTRY}
-
-                    '''
-
-                }
-
-            }
-
+            aws ecr get-login-password \
+            --region ${AWS_REGION} |
+            docker login \
+            --username AWS \
+            --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+            '''
         }
+    }
+}
 
         stage('Ensure ECR Repositories') {
 
