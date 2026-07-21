@@ -4,7 +4,7 @@ pipeline {
     git 'git' // ✅ Matches the Git installation you configured in Jenkins
   }
   options {
-    ansiColor('xterm')
+    ansiColor('xterm') // ✅ Colored logs
     buildDiscarder(logRotator(numToKeepStr: '20'))
     disableConcurrentBuilds()
     timestamps()
@@ -12,11 +12,12 @@ pipeline {
   environment {
     APP_NAME        = 'liontech-finance'
     KUBE_NAMESPACE  = 'liontech-finance'
-    // DOCKERHUB_NAMESPACE replaced with ECR registry
     ECR_REGISTRY    = '101257774115.dkr.ecr.us-east-1.amazonaws.com/banking-app'
     IMAGE_TAG       = ''
     K8S_MANIFEST    = 'k8s/liontech-finance.yaml'
     PROJECT_DIR     = '.'
+    // ✅ Slack channel and credentials (configure in Jenkins)
+    SLACK_CHANNEL   = '#jenkins-alerts'
   }
   stages {
     stage('Checkout') {
@@ -28,15 +29,20 @@ pipeline {
     stage('Prepare') {
       steps {
         script {
-          dir("${env.WORKSPACE}") {
-            def shortCommit = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+          // ✅ Use Jenkins-provided GIT_COMMIT instead of git rev-parse
+          if (env.GIT_COMMIT) {
+            def shortCommit = env.GIT_COMMIT.take(7)
             env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
+          } else {
+            error("GIT_COMMIT not available. Aborting pipeline.")
           }
+
           if (fileExists('liontech-finance/docker-compose.yml')) {
             env.PROJECT_DIR = 'liontech-finance'
           } else {
             env.PROJECT_DIR = '.'
           }
+
           if (!env.IMAGE_TAG?.trim()) {
             error("IMAGE_TAG was not set. Aborting pipeline.")
           }
@@ -51,6 +57,20 @@ pipeline {
           sh '''
             aws ecr get-login-password --region us-east-1 | \
             docker login --username AWS --password-stdin $ECR_REGISTRY
+          '''
+        }
+      }
+    }
+
+    stage('Ensure ECR Repositories') {
+      steps {
+        withCredentials([amazonWebServices(credentialsId: 'aws-credentials')]) {
+          sh '''
+            set -eu
+            for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+              aws ecr describe-repositories --repository-name banking-app/liontech-finance-$image --region us-east-1 >/dev/null 2>&1 || \
+              aws ecr create-repository --repository-name banking-app/liontech-finance-$image --region us-east-1
+            done
           '''
         }
       }
@@ -121,6 +141,17 @@ pipeline {
       }
     }
 
+    stage('Cleanup Docker Images') {
+      steps {
+        sh '''
+          set -eu
+          echo "Cleaning up unused Docker images..."
+          docker image prune -af || true
+          docker container prune -f || true
+        '''
+      }
+    }
+
     // -------------------------------
     // Commented Kubernetes Deployment
     // -------------------------------
@@ -156,12 +187,15 @@ pipeline {
   post {
     success {
       echo "LionTech Finance images pushed to ECR with tag ${env.IMAGE_TAG}"
+      slackSend(channel: env.SLACK_CHANNEL, color: 'good', message: "SUCCESS: ${env.APP_NAME} pipeline completed. Image tag: ${env.IMAGE_TAG}")
     }
     failure {
       echo "LionTech Finance pipeline failed. Check the stage logs above."
+      slackSend(channel: env.SLACK_CHANNEL, color: 'danger', message: "FAILURE: ${env.APP_NAME} pipeline failed. Check Jenkins logs.")
     }
     always {
       sh 'docker logout $ECR_REGISTRY >/dev/null 2>&1 || true'
     }
   }
 }
+
