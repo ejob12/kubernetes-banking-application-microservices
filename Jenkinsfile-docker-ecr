@@ -16,8 +16,8 @@ pipeline {
     IMAGE_TAG       = ''
     K8S_MANIFEST    = 'k8s/liontech-finance.yaml'
     PROJECT_DIR     = '.'
-    // ✅ Slack channel and credentials (configure in Jenkins)
     SLACK_CHANNEL   = '#jenkins-alerts'
+    SLACK_TOKEN_ID  = 'slack-token' // ✅ ID of Slack credential configured in Jenkins
   }
   stages {
     stage('Checkout') {
@@ -187,11 +187,17 @@ pipeline {
   post {
     success {
       echo "LionTech Finance images pushed to ECR with tag ${env.IMAGE_TAG}"
-      slackSend(channel: env.SLACK_CHANNEL, color: 'good', message: "SUCCESS: ${env.APP_NAME} pipeline completed. Image tag: ${env.IMAGE_TAG}")
+      slackSend(channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: "SUCCESS: ${env.APP_NAME} pipeline completed. Image tag: ${env.IMAGE_TAG}",
+                tokenCredentialId: env.SLACK_TOKEN_ID)
     }
     failure {
       echo "LionTech Finance pipeline failed. Check the stage logs above."
-      slackSend(channel: env.SLACK_CHANNEL, color: 'danger', message: "FAILURE: ${env.APP_NAME} pipeline failed. Check Jenkins logs.")
+      slackSend(channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: "FAILURE: ${env.APP_NAME} pipeline failed. Check Jenkins logs.",
+                tokenCredentialId: env.SLACK_TOKEN_ID)
     }
     always {
       sh 'docker logout $ECR_REGISTRY >/dev/null 2>&1 || true'
