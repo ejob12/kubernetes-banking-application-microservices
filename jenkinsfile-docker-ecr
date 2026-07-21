@@ -13,7 +13,7 @@ pipeline {
     APP_NAME        = 'liontech-finance'
     KUBE_NAMESPACE  = 'liontech-finance'
     // DOCKERHUB_NAMESPACE replaced with ECR registry
-    ECR_REGISTRY    = '123456789012.dkr.ecr.us-east-1.amazonaws.com'
+    ECR_REGISTRY    = '101257774115.dkr.ecr.us-east-1.amazonaws.com/banking-app'
     IMAGE_TAG       = ''
     K8S_MANIFEST    = 'k8s/liontech-finance.yaml'
     PROJECT_DIR     = '.'
