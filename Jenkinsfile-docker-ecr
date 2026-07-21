@@ -1,7 +1,7 @@
 pipeline {
   agent any
   tools {
-    git 'git' // ✅ Matches the Git installation you configured in Jenkins
+    git 'Default' // ✅ Matches the Git installation you configured in Jenkins
   }
   options {
     buildDiscarder(logRotator(numToKeepStr: '20'))
