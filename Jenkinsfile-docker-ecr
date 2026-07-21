@@ -4,7 +4,6 @@ pipeline {
     git 'git' // ✅ Matches the Git installation you configured in Jenkins
   }
   options {
-    ansiColor('xterm') // ✅ Colored logs
     buildDiscarder(logRotator(numToKeepStr: '20'))
     disableConcurrentBuilds()
     timestamps()
@@ -22,133 +21,151 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        checkout scm
+        ansiColor('xterm') {
+          checkout scm
+        }
       }
     }
 
     stage('Prepare') {
       steps {
-        script {
-          // ✅ Use Jenkins-provided GIT_COMMIT instead of git rev-parse
-          if (env.GIT_COMMIT) {
-            def shortCommit = env.GIT_COMMIT.take(7)
-            env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
-          } else {
-            error("GIT_COMMIT not available. Aborting pipeline.")
-          }
+        ansiColor('xterm') {
+          script {
+            // ✅ Use Jenkins-provided GIT_COMMIT instead of git rev-parse
+            if (env.GIT_COMMIT) {
+              def shortCommit = env.GIT_COMMIT.take(7)
+              env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
+            } else {
+              error("GIT_COMMIT not available. Aborting pipeline.")
+            }
 
-          if (fileExists('liontech-finance/docker-compose.yml')) {
-            env.PROJECT_DIR = 'liontech-finance'
-          } else {
-            env.PROJECT_DIR = '.'
-          }
+            if (fileExists('liontech-finance/docker-compose.yml')) {
+              env.PROJECT_DIR = 'liontech-finance'
+            } else {
+              env.PROJECT_DIR = '.'
+            }
 
-          if (!env.IMAGE_TAG?.trim()) {
-            error("IMAGE_TAG was not set. Aborting pipeline.")
+            if (!env.IMAGE_TAG?.trim()) {
+              error("IMAGE_TAG was not set. Aborting pipeline.")
+            }
           }
+          echo "Building ${env.APP_NAME} from ${env.PROJECT_DIR} with image tag ${env.IMAGE_TAG}"
         }
-        echo "Building ${env.APP_NAME} from ${env.PROJECT_DIR} with image tag ${env.IMAGE_TAG}"
       }
     }
 
     stage('ECR Login') {
       steps {
-        withCredentials([amazonWebServices(credentialsId: 'aws-credentials')]) {
-          sh '''
-            aws ecr get-login-password --region us-east-1 | \
-            docker login --username AWS --password-stdin $ECR_REGISTRY
-          '''
+        ansiColor('xterm') {
+          withCredentials([amazonWebServices(credentialsId: 'aws-credentials')]) {
+            sh '''
+              aws ecr get-login-password --region us-east-1 | \
+              docker login --username AWS --password-stdin $ECR_REGISTRY
+            '''
+          }
         }
       }
     }
 
     stage('Ensure ECR Repositories') {
       steps {
-        withCredentials([amazonWebServices(credentialsId: 'aws-credentials')]) {
-          sh '''
-            set -eu
-            for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-              aws ecr describe-repositories --repository-name banking-app/liontech-finance-$image --region us-east-1 >/dev/null 2>&1 || \
-              aws ecr create-repository --repository-name banking-app/liontech-finance-$image --region us-east-1
-            done
-          '''
+        ansiColor('xterm') {
+          withCredentials([amazonWebServices(credentialsId: 'aws-credentials')]) {
+            sh '''
+              set -eu
+              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+                aws ecr describe-repositories --repository-name banking-app/liontech-finance-$image --region us-east-1 >/dev/null 2>&1 || \
+                aws ecr create-repository --repository-name banking-app/liontech-finance-$image --region us-east-1
+              done
+            '''
+          }
         }
       }
     }
 
     stage('Validate') {
       steps {
-        dir(env.PROJECT_DIR) {
-          sh '''
-            set -eu
-            node --check shared/src/auth.js
-            node --check shared/src/http.js
-            node --check shared/src/server.js
-            node --check shared/src/store.js
-            node --check gateway/src/index.js
-            node --check services/auth/src/index.js
-            node --check services/profile/src/index.js
-            node --check services/accounts/src/index.js
-            node --check services/balancer/src/index.js
-            node --check services/notifications/src/index.js
-            node --check services/deposits/src/index.js
-            node --check services/transfers/src/index.js
-            node --check services/analytics/src/index.js
-            node --check services/ai/src/index.js
-            node --check services/admin/src/index.js
-          '''
+        ansiColor('xterm') {
+          dir(env.PROJECT_DIR) {
+            sh '''
+              set -eu
+              node --check shared/src/auth.js
+              node --check shared/src/http.js
+              node --check shared/src/server.js
+              node --check shared/src/store.js
+              node --check gateway/src/index.js
+              node --check services/auth/src/index.js
+              node --check services/profile/src/index.js
+              node --check services/accounts/src/index.js
+              node --check services/balancer/src/index.js
+              node --check services/notifications/src/index.js
+              node --check services/deposits/src/index.js
+              node --check services/transfers/src/index.js
+              node --check services/analytics/src/index.js
+              node --check services/ai/src/index.js
+              node --check services/admin/src/index.js
+            '''
+          }
         }
       }
     }
 
     stage('Build Images') {
       steps {
-        dir(env.PROJECT_DIR) {
-          sh '''
-            set -eu
-            for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-              docker build -f $image/Dockerfile -t $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG .
-            done
-          '''
+        ansiColor('xterm') {
+          dir(env.PROJECT_DIR) {
+            sh '''
+              set -eu
+              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+                docker build -f $image/Dockerfile -t $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG .
+              done
+            '''
+          }
         }
       }
     }
 
     stage('Tag Latest') {
       steps {
-        dir(env.PROJECT_DIR) {
-          sh '''
-            set -eu
-            for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-              docker tag $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG $ECR_REGISTRY/liontech-finance-$image:latest
-            done
-          '''
+        ansiColor('xterm') {
+          dir(env.PROJECT_DIR) {
+            sh '''
+              set -eu
+              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+                docker tag $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG $ECR_REGISTRY/liontech-finance-$image:latest
+              done
+            '''
+          }
         }
       }
     }
 
     stage('Push Images') {
       steps {
-        dir(env.PROJECT_DIR) {
-          sh '''
-            set -eu
-            for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-              docker push $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG
-              docker push $ECR_REGISTRY/liontech-finance-$image:latest
-            done
-          '''
+        ansiColor('xterm') {
+          dir(env.PROJECT_DIR) {
+            sh '''
+              set -eu
+              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+                docker push $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG
+                docker push $ECR_REGISTRY/liontech-finance-$image:latest
+              done
+            '''
+          }
         }
       }
     }
 
     stage('Cleanup Docker Images') {
       steps {
-        sh '''
-          set -eu
-          echo "Cleaning up unused Docker images..."
-          docker image prune -af || true
-          docker container prune -f || true
-        '''
+        ansiColor('xterm') {
+          sh '''
+            set -eu
+            echo "Cleaning up unused Docker images..."
+            docker image prune -af || true
+            docker container prune -f || true
+          '''
+        }
       }
     }
 
@@ -158,25 +175,27 @@ pipeline {
     /*
     stage('Deploy To Kubernetes') {
       steps {
-        withCredentials([
-          file(credentialsId: 'kubeconfig-liontech-finance', variable: 'KUBECONFIG'),
-          string(credentialsId: 'liontech-finance-auth-secret', variable: 'AUTH_SECRET'),
-          string(credentialsId: 'liontech-finance-service-token', variable: 'SERVICE_TOKEN')
-        ]) {
-          dir(env.PROJECT_DIR) {
-            sh '''
-              set -eu
-              kubectl get namespace "$KUBE_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$KUBE_NAMESPACE"
-              kubectl apply -f "$K8S_MANIFEST"
-              kubectl -n "$KUBE_NAMESPACE" create secret generic liontech-finance-secrets \
-                --from-literal=AUTH_SECRET="$AUTH_SECRET" \
-                --from-literal=SERVICE_TOKEN="$SERVICE_TOKEN" \
-                --dry-run=client -o yaml | kubectl apply -f -
-              for svc in frontend api-gateway auth-service profile-service accounts-service balancer-service notifications-service deposits-service transfers-service analytics-service ai-service admin-service; do
-                kubectl -n "$KUBE_NAMESPACE" rollout status deployment/$svc --timeout=180s
-              done
-              kubectl -n "$KUBE_NAMESPACE" get svc
-            '''
+        ansiColor('xterm') {
+          withCredentials([
+            file(credentialsId: 'kubeconfig-liontech-finance', variable: 'KUBECONFIG'),
+            string(credentialsId: 'liontech-finance-auth-secret', variable: 'AUTH_SECRET'),
+            string(credentialsId: 'liontech-finance-service-token', variable: 'SERVICE_TOKEN')
+          ]) {
+            dir(env.PROJECT_DIR) {
+              sh '''
+                set -eu
+                kubectl get namespace "$KUBE_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$KUBE_NAMESPACE"
+                kubectl apply -f "$K8S_MANIFEST"
+                kubectl -n "$KUBE_NAMESPACE" create secret generic liontech-finance-secrets \
+                  --from-literal=AUTH_SECRET="$AUTH_SECRET" \
+                  --from-literal=SERVICE_TOKEN="$SERVICE_TOKEN" \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                for svc in frontend api-gateway auth-service profile-service accounts-service balancer-service notifications-service deposits-service transfers-service analytics-service ai-service admin-service; do
+                  kubectl -n "$KUBE_NAMESPACE" rollout status deployment/$svc --timeout=180s
+                done
+                kubectl -n "$KUBE_NAMESPACE" get svc
+              '''
+            }
           }
         }
       }
