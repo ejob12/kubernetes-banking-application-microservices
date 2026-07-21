@@ -66,29 +66,36 @@ pipeline {
 
         }
 
-     stage('Prepare Build') {
+    stage('Prepare Build') {
 
     steps {
 
         script {
 
-            env.SHORT_SHA = sh(
-                script: "git rev-parse --short HEAD",
+            def shortSha = sh(
+                script: 'git rev-parse --short HEAD',
                 returnStdout: true
             ).trim()
 
-            env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.SHORT_SHA}"
+            if (!shortSha) {
+                error("Unable to determine Git commit SHA.")
+            }
 
+            env.SHORT_SHA = shortSha
+            env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortSha}"
+
+            echo "==========================================="
+            echo "Preparing build..."
             echo "Build Number : ${env.BUILD_NUMBER}"
             echo "Commit SHA   : ${env.SHORT_SHA}"
             echo "Image Tag    : ${env.IMAGE_TAG}"
+            echo "==========================================="
 
         }
 
     }
 
 }
-
         stage('Validate Build Environment') {
 
             steps {
