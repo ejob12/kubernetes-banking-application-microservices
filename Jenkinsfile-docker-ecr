@@ -162,24 +162,40 @@ stage('Prepare Build') {
             }
 
         }
-       stage('ECR Login') {
+stage('ECR Login') {
 
     steps {
 
-        withAWS(credentials: 'aws-credentials',
-                region: "${AWS_REGION}") {
+        withAWS(
+            credentials: 'aws-credentials',
+            region: "${AWS_REGION}"
+        ) {
 
-            sh '''
-            echo "Logging into Amazon ECR..."
+            script {
 
-            aws sts get-caller-identity
+                env.AWS_ACCOUNT_ID = sh(
+                    script: '''
+                    aws sts get-caller-identity \
+                    --query Account \
+                    --output text
+                    ''',
+                    returnStdout: true
+                ).trim()
 
-            aws ecr get-login-password \
-            --region ${AWS_REGION} |
-            docker login \
-            --username AWS \
-            --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-            '''
+
+                echo "AWS Account ID: ${env.AWS_ACCOUNT_ID}"
+
+
+                sh '''
+                echo "Logging into Amazon ECR..."
+
+                aws ecr get-login-password \
+                --region ${AWS_REGION} | \
+                docker login \
+                --username AWS \
+                --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                '''
+            }
         }
     }
 }
