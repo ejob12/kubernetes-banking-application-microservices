@@ -162,7 +162,7 @@ stage('Prepare Build') {
             }
 
         }
-stage('ECR Login') {
+stage('Deploy to ECR') {
 
     steps {
 
@@ -173,100 +173,33 @@ stage('ECR Login') {
 
             script {
 
-                env.AWS_ACCOUNT_ID = sh(
-                    script: '''
-                    aws sts get-caller-identity \
-                    --query Account \
-                    --output text
-                    ''',
-                    returnStdout: true
-                ).trim()
-
-
-                echo "AWS Account ID: ${env.AWS_ACCOUNT_ID}"
-
-
                 sh '''
-                echo "Logging into Amazon ECR..."
+                
+                echo "AWS Identity"
 
-                aws ecr get-login-password \
-                --region ${AWS_REGION} | \
-                docker login \
-                --username AWS \
-                --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                aws sts get-caller-identity
+
+
+                echo "Creating ECR repositories"
+
+
+                aws ecr create-repository \
+                --repository-name banking-app/liontech-finance-frontend \
+                --region ${AWS_REGION} || true
+
+
+                aws ecr create-repository \
+                --repository-name banking-app/gateway \
+                --region ${AWS_REGION} || true
+
+
                 '''
+
             }
+
         }
     }
 }
-
-        stage('Ensure ECR Repositories') {
-
-            steps {
-
-                script {
-
-                    def repositories = [
-
-                        "frontend",
-
-                        "gateway",
-
-                        "auth",
-
-                        "profile",
-
-                        "accounts",
-
-                        "balancer",
-
-                        "notifications",
-
-                        "deposits",
-
-                        "transfers",
-
-                        "analytics",
-
-                        "ai",
-
-                        "admin"
-
-                    ]
-
-                    repositories.each { repo ->
-
-                        sh """
-
-                        if aws ecr describe-repositories \
-                        --repository-name ${ECR_NAMESPACE}/liontech-finance-${repo} \
-                        --region ${AWS_REGION} >/dev/null 2>&1
-
-                        then
-
-                            echo "Repository exists -> ${repo}"
-
-                        else
-
-                            echo "Creating repository -> ${repo}"
-
-                            aws ecr create-repository \
-                            --repository-name ${ECR_NAMESPACE}/liontech-finance-${repo} \
-                            --image-scanning-configuration scanOnPush=true \
-                            --region ${AWS_REGION}
-
-                        fi
-
-                        """
-
-                    }
-
-                }
-
-            }
-
-        }
-
         stage('Build Docker Images') {
 
             steps {
