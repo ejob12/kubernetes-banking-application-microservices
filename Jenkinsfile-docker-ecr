@@ -14,31 +14,21 @@ pipeline {
 
     }
 
-    environment {
+environment {
 
-        AWS_REGION      = 'us-east-1'
+    AWS_REGION = "us-east-1"
 
-        APP_NAME        = 'liontech-finance'
+    AWS_ACCOUNT_ID = "101257774115"
 
-        KUBE_NAMESPACE  = 'liontech-finance'
+    ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-        ECR_REGISTRY    = '101257774115.dkr.ecr.us-east-1.amazonaws.com'
+    ECR_PREFIX = "banking-app"
 
-        ECR_NAMESPACE   = 'banking-app'
+    IMAGE_TAG = ""
 
-        PROJECT_DIR     = '.'
+    SHORT_SHA = ""
 
-        IMAGE_TAG       = ''
-
-        SHORT_SHA       = ''
-
-        K8S_MANIFEST    = 'k8s/liontech-finance.yaml'
-
-        SLACK_CHANNEL   = '#jenkins-alerts'
-
-        SLACK_TOKEN_ID  = 'slack-token'
-
-    }
+}
 
     stages {
 
@@ -72,22 +62,35 @@ stage('Prepare Build') {
 
         script {
 
+            echo "==========================================="
+            echo "Preparing build..."
+
             env.SHORT_SHA = sh(
-                script: 'git rev-parse --short HEAD',
+                script: "git rev-parse --short HEAD",
                 returnStdout: true
             ).trim()
+
+
+            if (!env.SHORT_SHA) {
+
+                error("Unable to determine Git commit SHA")
+
+            }
+
 
             env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.SHORT_SHA}"
 
 
-            echo "==========================================="
-            echo "Preparing build..."
             echo "Build Number : ${env.BUILD_NUMBER}"
             echo "Commit SHA   : ${env.SHORT_SHA}"
             echo "Image Tag    : ${env.IMAGE_TAG}"
+
             echo "==========================================="
+
         }
+
     }
+
 }
         stage('Validate Build Environment') {
 
@@ -162,7 +165,76 @@ stage('Prepare Build') {
             }
 
         }
-stage('Deploy to ECR') {
+stage('Ensure ECR Repositories') {
+
+    steps {
+
+        script {
+
+            def repositories = [
+
+                "frontend",
+                "gateway",
+                "accounts",
+                "admin",
+                "ai",
+                "analytics",
+                "auth",
+                "balancer",
+                "deposits",
+                "notifications",
+                "profile",
+                "transfers"
+
+            ]
+
+
+            withAWS(
+                credentials: 'aws-credentials',
+                region: "${AWS_REGION}"
+            ) {
+
+
+                repositories.each { repo ->
+
+
+                    def repositoryName = "${ECR_PREFIX}/${repo}"
+
+
+                    sh """
+                    echo Checking ECR repository: ${repositoryName}
+
+
+                    aws ecr describe-repositories \
+                    --repository-name ${repositoryName} \
+                    --region ${AWS_REGION}
+
+
+                    if [ \$? -ne 0 ]; then
+
+                        echo Creating repository ${repositoryName}
+
+
+                        aws ecr create-repository \
+                        --repository-name ${repositoryName} \
+                        --image-scanning-configuration scanOnPush=true \
+                        --region ${AWS_REGION}
+
+                    fi
+
+                    """
+
+                }
+
+            }
+
+        }
+
+    }
+
+}
+
+stage('ECR Login') {
 
     steps {
 
@@ -171,34 +243,28 @@ stage('Deploy to ECR') {
             region: "${AWS_REGION}"
         ) {
 
-            script {
 
-                sh '''
-                
-                echo "AWS Identity"
+            sh """
 
-                aws sts get-caller-identity
+            echo Logging into Amazon ECR...
 
 
-                echo "Creating ECR repositories"
+            aws sts get-caller-identity
 
 
-                aws ecr create-repository \
-                --repository-name banking-app/liontech-finance-frontend \
-                --region ${AWS_REGION} || true
+            aws ecr get-login-password \
+            --region ${AWS_REGION} | \
+            docker login \
+            --username AWS \
+            --password-stdin ${ECR_REGISTRY}
 
 
-                aws ecr create-repository \
-                --repository-name banking-app/gateway \
-                --region ${AWS_REGION} || true
-
-
-                '''
-
-            }
+            """
 
         }
+
     }
+
 }
         stage('Build Docker Images') {
 
