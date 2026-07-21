@@ -66,33 +66,28 @@ pipeline {
 
         }
 
-        stage('Prepare Build') {
+     stage('Prepare Build') {
 
-            steps {
+    steps {
 
-                script {
+        script {
 
-                    env.SHORT_SHA = sh(
+            env.SHORT_SHA = sh(
+                script: "git rev-parse --short HEAD",
+                returnStdout: true
+            ).trim()
 
-                        script: "git rev-parse --short HEAD",
+            env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.SHORT_SHA}"
 
-                        returnStdout: true
-
-                    ).trim()
-
-                    env.IMAGE_TAG = "${BUILD_NUMBER}-${SHORT_SHA}"
-
-                }
-
-                echo "Build Number : ${BUILD_NUMBER}"
-
-                echo "Commit SHA   : ${SHORT_SHA}"
-
-                echo "Image Tag    : ${IMAGE_TAG}"
-
-            }
+            echo "Build Number : ${env.BUILD_NUMBER}"
+            echo "Commit SHA   : ${env.SHORT_SHA}"
+            echo "Image Tag    : ${env.IMAGE_TAG}"
 
         }
+
+    }
+
+}
 
         stage('Validate Build Environment') {
 
