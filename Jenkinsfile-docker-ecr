@@ -1,234 +1,669 @@
 pipeline {
-  agent any
-  tools {
-    git 'Default' // ✅ Matches the Git installation you configured in Jenkins
-  }
-  options {
-    buildDiscarder(logRotator(numToKeepStr: '20'))
-    disableConcurrentBuilds()
-    timestamps()
-  }
-  environment {
-    APP_NAME        = 'liontech-finance'
-    KUBE_NAMESPACE  = 'liontech-finance'
-    ECR_REGISTRY    = '101257774115.dkr.ecr.us-east-1.amazonaws.com/banking-app'
-    IMAGE_TAG       = '' // will be set dynamically in Prepare stage
-    K8S_MANIFEST    = 'k8s/liontech-finance.yaml'
-    PROJECT_DIR     = '.'
-    SLACK_CHANNEL   = '#jenkins-alerts'
-    SLACK_TOKEN_ID  = 'slack-token'
-  }
-  stages {
-    stage('Checkout') {
-      steps {
-        ansiColor('xterm') {
-          checkout scm
-        }
-      }
+
+    agent any
+
+    options {
+
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+
+        disableConcurrentBuilds()
+
+        timestamps()
+
+        ansiColor('xterm')
+
     }
 
-    stage('Prepare') {
-      steps {
-        ansiColor('xterm') {
-          script {
-            // ✅ Dynamically set IMAGE_TAG using Jenkins-provided GIT_COMMIT
-            if (env.GIT_COMMIT) {
-              def shortCommit = env.GIT_COMMIT.take(7)
-              env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
-            } else {
-              error("GIT_COMMIT not available. Aborting pipeline.")
+    environment {
+
+        AWS_REGION      = 'us-east-1'
+
+        APP_NAME        = 'liontech-finance'
+
+        KUBE_NAMESPACE  = 'liontech-finance'
+
+        ECR_REGISTRY    = '101257774115.dkr.ecr.us-east-1.amazonaws.com'
+
+        ECR_NAMESPACE   = 'banking-app'
+
+        PROJECT_DIR     = '.'
+
+        IMAGE_TAG       = ''
+
+        SHORT_SHA       = ''
+
+        K8S_MANIFEST    = 'k8s/liontech-finance.yaml'
+
+        SLACK_CHANNEL   = '#jenkins-alerts'
+
+        SLACK_TOKEN_ID  = 'slack-token'
+
+    }
+
+    stages {
+
+        stage('Checkout Source Code') {
+
+            steps {
+
+                echo 'Checking out Git repository...'
+
+                checkout scm
+
+                sh '''
+
+                pwd
+
+                ls -la
+
+                git branch
+
+                git log --oneline -5
+
+                '''
+
             }
 
-            if (fileExists('liontech-finance/docker-compose.yml')) {
-              env.PROJECT_DIR = 'liontech-finance'
-            } else {
-              env.PROJECT_DIR = '.'
+        }
+
+        stage('Prepare Build') {
+
+            steps {
+
+                script {
+
+                    env.SHORT_SHA = sh(
+
+                        script: "git rev-parse --short HEAD",
+
+                        returnStdout: true
+
+                    ).trim()
+
+                    env.IMAGE_TAG = "${BUILD_NUMBER}-${SHORT_SHA}"
+
+                }
+
+                echo "Build Number : ${BUILD_NUMBER}"
+
+                echo "Commit SHA   : ${SHORT_SHA}"
+
+                echo "Image Tag    : ${IMAGE_TAG}"
+
             }
 
-            if (!env.IMAGE_TAG?.trim()) {
-              error("IMAGE_TAG was not set. Aborting pipeline.")
-            }
-          }
-          echo "Building ${env.APP_NAME} from ${env.PROJECT_DIR} with image tag ${env.IMAGE_TAG}"
         }
-      }
-    }
 
-    stage('ECR Login') {
-      steps {
-        ansiColor('xterm') {
-          withCredentials([amazonWebServices(credentialsId: 'aws-credentials')]) {
-            sh '''
-              aws ecr get-login-password --region us-east-1 | \
-              docker login --username AWS --password-stdin $ECR_REGISTRY
-            '''
-          }
-        }
-      }
-    }
+        stage('Validate Build Environment') {
 
-    stage('Ensure ECR Repositories') {
-      steps {
-        ansiColor('xterm') {
-          withCredentials([amazonWebServices(credentialsId: 'aws-credentials')]) {
-            sh '''
-              set -eu
-              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-                aws ecr describe-repositories --repository-name banking-app/liontech-finance-$image --region us-east-1 >/dev/null 2>&1 || \
-                aws ecr create-repository --repository-name banking-app/liontech-finance-$image --region us-east-1
-              done
-            '''
-          }
-        }
-      }
-    }
+            steps {
 
-    stage('Validate') {
-      steps {
-        ansiColor('xterm') {
-          dir(env.PROJECT_DIR) {
-            sh '''
-              set -eu
-              node --check shared/src/auth.js
-              node --check shared/src/http.js
-              node --check shared/src/server.js
-              node --check shared/src/store.js
-              node --check gateway/src/index.js
-              node --check services/auth/src/index.js
-              node --check services/profile/src/index.js
-              node --check services/accounts/src/index.js
-              node --check services/balancer/src/index.js
-              node --check services/notifications/src/index.js
-              node --check services/deposits/src/index.js
-              node --check services/transfers/src/index.js
-              node --check services/analytics/src/index.js
-              node --check services/ai/src/index.js
-              node --check services/admin/src/index.js
-            '''
-          }
-        }
-      }
-    }
+                sh '''
 
-    stage('Build Images') {
-      steps {
-        ansiColor('xterm') {
-          dir(env.PROJECT_DIR) {
-            sh '''
-              set -eu
-              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-                docker build -f $image/Dockerfile -t $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG .
-              done
-            '''
-          }
-        }
-      }
-    }
-
-    stage('Tag Latest') {
-      steps {
-        ansiColor('xterm') {
-          dir(env.PROJECT_DIR) {
-            sh '''
-              set -eu
-              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-                docker tag $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG $ECR_REGISTRY/liontech-finance-$image:latest
-              done
-            '''
-          }
-        }
-      }
-    }
-
-    stage('Push Images') {
-      steps {
-        ansiColor('xterm') {
-          dir(env.PROJECT_DIR) {
-            sh '''
-              set -eu
-              for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
-                docker push $ECR_REGISTRY/liontech-finance-$image:$IMAGE_TAG
-                docker push $ECR_REGISTRY/liontech-finance-$image:latest
-              done
-            '''
-          }
-        }
-      }
-    }
-
-    stage('Cleanup Docker Images') {
-      steps {
-        ansiColor('xterm') {
-          sh '''
-            set -eu
-            echo "Cleaning up unused Docker images..."
-            docker image prune -af || true
-            docker container prune -f || true
-          '''
-        }
-      }
-    }
-
-    // -------------------------------
-    // Commented Kubernetes Deployment
-    // -------------------------------
-    /*
-    stage('Deploy To Kubernetes') {
-      steps {
-        ansiColor('xterm') {
-          withCredentials([
-            file(credentialsId: 'kubeconfig-liontech-finance', variable: 'KUBECONFIG'),
-            string(credentialsId: 'liontech-finance-auth-secret', variable: 'AUTH_SECRET'),
-            string(credentialsId: 'liontech-finance-service-token', variable: 'SERVICE_TOKEN')
-          ]) {
-            dir(env.PROJECT_DIR) {
-              sh '''
                 set -eu
-                kubectl get namespace "$KUBE_NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$KUBE_NAMESPACE"
-                kubectl apply -f "$K8S_MANIFEST"
-                kubectl -n "$KUBE_NAMESPACE" create secret generic liontech-finance-secrets \
-                  --from-literal=AUTH_SECRET="$AUTH_SECRET" \
-                  --from-literal=SERVICE_TOKEN="$SERVICE_TOKEN" \
-                  --dry-run=client -o yaml | kubectl apply -f -
-                for svc in frontend api-gateway auth-service profile-service accounts-service balancer-service notifications-service deposits-service transfers-service analytics-service ai-service admin-service; do
-                  kubectl -n "$KUBE_NAMESPACE" rollout status deployment/$svc --timeout=180s
-                done
-                kubectl -n "$KUBE_NAMESPACE" get svc
-              '''
+
+                echo "===== TOOL VERSIONS ====="
+
+                docker --version
+
+                aws --version
+
+                node --version
+
+                git --version
+
+                '''
+
             }
-          }
+
         }
-      }
-    }
-    */
 
-    // -------------------------------
-    // Commented Slack Notifications
-    // -------------------------------
-    /*
-    stage('Slack Notification') {
-      steps {
-        slackSend(
-          channel: SLACK_CHANNEL,
-          tokenCredentialId: SLACK_TOKEN_ID,
-          message: "Pipeline finished with status: ${currentBuild.currentResult}"
-        )
-      }
-    }
-    */
-  }
+        stage('Validate Repository') {
 
-  post {
-    success {
-      echo "LionTech Finance images pushed to ECR with tag ${env.IMAGE_TAG}"
-      // Slack notifications disabled for now
+            steps {
+
+                script {
+
+                    def dockerfiles = [
+
+                        "frontend/Dockerfile",
+
+                        "gateway/Dockerfile",
+
+                        "services/auth/Dockerfile",
+
+                        "services/profile/Dockerfile",
+
+                        "services/accounts/Dockerfile",
+
+                        "services/balancer/Dockerfile",
+
+                        "services/notifications/Dockerfile",
+
+                        "services/deposits/Dockerfile",
+
+                        "services/transfers/Dockerfile",
+
+                        "services/analytics/Dockerfile",
+
+                        "services/ai/Dockerfile",
+
+                        "services/admin/Dockerfile"
+
+                    ]
+
+                    dockerfiles.each {
+
+                        if (!fileExists(it)) {
+
+                            error("Dockerfile missing: ${it}")
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+        stage('ECR Login') {
+
+            steps {
+
+                withCredentials([
+
+                    amazonWebServices(credentialsId: 'aws-credentials')
+
+                ]) {
+
+                    sh '''
+
+                    set -eu
+
+                    echo "==========================================="
+
+                    echo "VERIFYING AWS CREDENTIALS"
+
+                    echo "==========================================="
+
+                    aws sts get-caller-identity
+
+                    echo ""
+
+                    echo "==========================================="
+
+                    echo "LOGGING INTO AMAZON ECR"
+
+                    echo "==========================================="
+
+                    aws ecr get-login-password \
+                    --region ${AWS_REGION} | \
+                    docker login \
+                    --username AWS \
+                    --password-stdin ${ECR_REGISTRY}
+
+                    '''
+
+                }
+
+            }
+
+        }
+
+        stage('Ensure ECR Repositories') {
+
+            steps {
+
+                script {
+
+                    def repositories = [
+
+                        "frontend",
+
+                        "gateway",
+
+                        "auth",
+
+                        "profile",
+
+                        "accounts",
+
+                        "balancer",
+
+                        "notifications",
+
+                        "deposits",
+
+                        "transfers",
+
+                        "analytics",
+
+                        "ai",
+
+                        "admin"
+
+                    ]
+
+                    repositories.each { repo ->
+
+                        sh """
+
+                        if aws ecr describe-repositories \
+                        --repository-name ${ECR_NAMESPACE}/liontech-finance-${repo} \
+                        --region ${AWS_REGION} >/dev/null 2>&1
+
+                        then
+
+                            echo "Repository exists -> ${repo}"
+
+                        else
+
+                            echo "Creating repository -> ${repo}"
+
+                            aws ecr create-repository \
+                            --repository-name ${ECR_NAMESPACE}/liontech-finance-${repo} \
+                            --image-scanning-configuration scanOnPush=true \
+                            --region ${AWS_REGION}
+
+                        fi
+
+                        """
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        stage('Build Docker Images') {
+
+            steps {
+
+                sh '''
+
+                set -eu
+
+                echo "==========================================="
+
+                echo "BUILDING FRONTEND"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-frontend:${IMAGE_TAG} \
+                -f frontend/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING GATEWAY"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-gateway:${IMAGE_TAG} \
+                -f gateway/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING AUTH"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-auth:${IMAGE_TAG} \
+                -f services/auth/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING PROFILE"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-profile:${IMAGE_TAG} \
+                -f services/profile/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING ACCOUNTS"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-accounts:${IMAGE_TAG} \
+                -f services/accounts/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING BALANCER"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-balancer:${IMAGE_TAG} \
+                -f services/balancer/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING NOTIFICATIONS"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-notifications:${IMAGE_TAG} \
+                -f services/notifications/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING DEPOSITS"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-deposits:${IMAGE_TAG} \
+                -f services/deposits/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING TRANSFERS"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-transfers:${IMAGE_TAG} \
+                -f services/transfers/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING ANALYTICS"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-analytics:${IMAGE_TAG} \
+                -f services/analytics/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING AI"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-ai:${IMAGE_TAG} \
+                -f services/ai/Dockerfile .
+
+
+
+                echo "==========================================="
+
+                echo "BUILDING ADMIN"
+
+                echo "==========================================="
+
+                docker build \
+                -t ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-admin:${IMAGE_TAG} \
+                -f services/admin/Dockerfile .
+
+                '''
+
+            }
+
+        }
+        stage('Tag Latest Images') {
+
+            steps {
+
+                script {
+
+                    def repositories = [
+
+                        "frontend",
+                        "gateway",
+                        "auth",
+                        "profile",
+                        "accounts",
+                        "balancer",
+                        "notifications",
+                        "deposits",
+                        "transfers",
+                        "analytics",
+                        "ai",
+                        "admin"
+
+                    ]
+
+                    repositories.each { repo ->
+
+                        sh """
+
+                        docker tag \
+                        ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-${repo}:${IMAGE_TAG} \
+                        ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-${repo}:latest
+
+                        """
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        stage('Push Images To Amazon ECR') {
+
+            steps {
+
+                script {
+
+                    def repositories = [
+
+                        "frontend",
+                        "gateway",
+                        "auth",
+                        "profile",
+                        "accounts",
+                        "balancer",
+                        "notifications",
+                        "deposits",
+                        "transfers",
+                        "analytics",
+                        "ai",
+                        "admin"
+
+                    ]
+
+                    repositories.each { repo ->
+
+                        sh """
+
+                        echo "======================================"
+
+                        echo "Pushing ${repo}"
+
+                        echo "======================================"
+
+                        docker push \
+                        ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-${repo}:${IMAGE_TAG}
+
+                        docker push \
+                        ${ECR_REGISTRY}/${ECR_NAMESPACE}/liontech-finance-${repo}:latest
+
+                        """
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        stage('Cleanup Docker Images') {
+
+            steps {
+
+                sh '''
+
+                set -eu
+
+                echo "Cleaning Docker images..."
+
+                docker image prune -af || true
+
+                docker builder prune -af || true
+
+                docker container prune -f || true
+
+                '''
+
+            }
+
+        }
+
+        /*
+        ===========================================================
+                        KUBERNETES DEPLOYMENT
+                   (COMMENTED FOR FUTURE USE)
+        ===========================================================
+
+        stage('Deploy To Kubernetes') {
+
+            steps {
+
+                withCredentials([
+
+                    file(
+                        credentialsId: 'kubeconfig-liontech-finance',
+                        variable: 'KUBECONFIG'
+                    ),
+
+                    string(
+                        credentialsId: 'liontech-finance-auth-secret',
+                        variable: 'AUTH_SECRET'
+                    ),
+
+                    string(
+                        credentialsId: 'liontech-finance-service-token',
+                        variable: 'SERVICE_TOKEN'
+                    )
+
+                ]) {
+
+                    sh '''
+
+                    kubectl apply -f ${K8S_MANIFEST}
+
+                    '''
+
+                }
+
+            }
+
+        }
+        */
+
+        /*
+        ===========================================================
+                       SLACK NOTIFICATIONS
+                  (COMMENTED FOR FUTURE USE)
+        ===========================================================
+
+        stage('Slack Notification') {
+
+            steps {
+
+                slackSend(
+
+                    channel: SLACK_CHANNEL,
+
+                    tokenCredentialId: SLACK_TOKEN_ID,
+
+                    message: "Pipeline completed successfully."
+
+                )
+
+            }
+
+        }
+        */
+
     }
-    failure {
-      echo "LionTech Finance pipeline failed. Check the stage logs above."
-      // Slack notifications disabled for now
+
+    post {
+
+        success {
+
+            echo ""
+
+            echo "==========================================="
+
+            echo "PIPELINE COMPLETED SUCCESSFULLY"
+
+            echo ""
+
+            echo "Application : ${APP_NAME}"
+
+            echo "Image Tag   : ${IMAGE_TAG}"
+
+            echo ""
+
+            echo "==========================================="
+
+        }
+
+        failure {
+
+            echo ""
+
+            echo "==========================================="
+
+            echo "PIPELINE FAILED"
+
+            echo ""
+
+            echo "Review the failed stage above."
+
+            echo ""
+
+            echo "==========================================="
+
+        }
+
+        always {
+
+            sh '''
+
+            docker logout ${ECR_REGISTRY} >/dev/null 2>&1 || true
+
+            '''
+
+        }
+
     }
-    always {
-      sh 'docker logout $ECR_REGISTRY >/dev/null 2>&1 || true'
-    }
-  }
+
 }
