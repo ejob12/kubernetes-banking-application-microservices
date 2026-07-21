@@ -12,7 +12,7 @@ pipeline {
     APP_NAME        = 'liontech-finance'
     KUBE_NAMESPACE  = 'liontech-finance'
     ECR_REGISTRY    = '101257774115.dkr.ecr.us-east-1.amazonaws.com/banking-app'
-    IMAGE_TAG       = ''
+    IMAGE_TAG       = '' // will be set dynamically in Prepare stage
     K8S_MANIFEST    = 'k8s/liontech-finance.yaml'
     PROJECT_DIR     = '.'
     SLACK_CHANNEL   = '#jenkins-alerts'
@@ -31,7 +31,7 @@ pipeline {
       steps {
         ansiColor('xterm') {
           script {
-            // ✅ Use Jenkins-provided GIT_COMMIT instead of git rev-parse
+            // ✅ Dynamically set IMAGE_TAG using Jenkins-provided GIT_COMMIT
             if (env.GIT_COMMIT) {
               def shortCommit = env.GIT_COMMIT.take(7)
               env.IMAGE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
@@ -198,6 +198,21 @@ pipeline {
             }
           }
         }
+      }
+    }
+    */
+
+    // -------------------------------
+    // Commented Slack Notifications
+    // -------------------------------
+    /*
+    stage('Slack Notification') {
+      steps {
+        slackSend(
+          channel: SLACK_CHANNEL,
+          tokenCredentialId: SLACK_TOKEN_ID,
+          message: "Pipeline finished with status: ${currentBuild.currentResult}"
+        )
       }
     }
     */
