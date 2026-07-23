@@ -65,18 +65,20 @@ stage('Prepare Build') {
             echo "==========================================="
             echo "Preparing build..."
 
-            env.SHORT_SHA = sh(
-                script: "git rev-parse --short HEAD",
+            def commitSha = sh(
+                script: """
+                    git rev-parse HEAD || git rev-parse origin/main
+                """,
                 returnStdout: true
             ).trim()
 
 
-            if (!env.SHORT_SHA) {
-
+            if (!commitSha) {
                 error("Unable to determine Git commit SHA")
-
             }
 
+
+            env.SHORT_SHA = commitSha.take(7)
 
             env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.SHORT_SHA}"
 
@@ -88,9 +90,7 @@ stage('Prepare Build') {
             echo "==========================================="
 
         }
-
     }
-
 }
         stage('Validate Build Environment') {
 
@@ -171,22 +171,24 @@ stage('Ensure ECR Repositories') {
 
         script {
 
-            def repositories = [
+                         def repositories = [
 
-                "frontend",
-                "gateway",
-                "accounts",
-                "admin",
-                "ai",
-                "analytics",
-                "auth",
-                "balancer",
-                "deposits",
-                "notifications",
-                "profile",
-                "transfers"
+                           "banking-app/frontend",
+                           "banking-app/gateway",
 
-            ]
+                           "banking-app/accounts",
+                           "banking-app/admin",
+                           "banking-app/ai",
+                           "banking-app/auth",
+                           "banking-app/balancer",
+                           "banking-app/profile",
+
+                           "banking-app/analytics",
+                           "banking-app/deposits",
+                           "banking-app/notifications",
+                           "banking-app/transfers"
+
+                      ]
 
 
             withAWS(
