@@ -7,3 +7,12 @@ data/
 # Aider Studio (auto-added)
 REPO_MAP.md
 .aider/
+
+# Terraform local state, providers, and secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log

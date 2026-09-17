@@ -14,6 +14,9 @@ pipeline {
         AWS_REGION      = "us-east-1"
         AWS_ACCOUNT_ID  = "101257774115"
         ECR_REGISTRY    = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        SONARQUBE_SERVER = "sonarqube"
+        KUBE_NAMESPACE   = "liontech-finance"
+        K8S_MANIFEST     = "k8s/liontech-finance.yaml"
 
         IMAGE_TAG = ""
         SHORT_SHA = ""
@@ -92,6 +95,35 @@ pipeline {
         stage('Validate Repository') {
 
             steps {
+
+        stage('SonarQube Analysis') {
+
+            steps {
+
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_AUTH_TOKEN')]) {
+
+                    withSonarQubeEnv("${SONARQUBE_SERVER}") {
+
+                        sh '''
+                        set -e
+
+                        docker run --rm \\
+                          -e SONAR_HOST_URL="$SONAR_HOST_URL" \\
+                          -e SONAR_TOKEN="$SONAR_AUTH_TOKEN" \\
+                          -v "$WORKSPACE:/usr/src" \\
+                          sonarsource/sonar-scanner-cli:latest \\
+                          -Dsonar.projectKey=liontech-finance \\
+                          -Dsonar.sources=/usr/src \\
+                          -Dsonar.scm.provider=git
+                        '''
+
+                    }
+
+                }
+
+            }
+
+        }
 
                 script {
 
@@ -372,6 +404,48 @@ pipeline {
             }
 
         }
+
+                stage('Deploy To EKS') {
+
+                        steps {
+
+                                withCredentials([
+                                        file(credentialsId: 'kubeconfig-liontech-finance', variable: 'KUBECONFIG'),
+                                        string(credentialsId: 'liontech-finance-auth-secret', variable: 'AUTH_SECRET'),
+                                        string(credentialsId: 'liontech-finance-service-token', variable: 'SERVICE_TOKEN')
+                                ]) {
+
+                                        sh '''
+                                        set -e
+
+                                        kubectl apply -f "$K8S_MANIFEST"
+
+                                        kubectl -n "$KUBE_NAMESPACE" create secret generic liontech-finance-secrets \\
+                                            --from-literal=AUTH_SECRET="$AUTH_SECRET" \\
+                                            --from-literal=SERVICE_TOKEN="$SERVICE_TOKEN" \\
+                                            --dry-run=client -o yaml | kubectl apply -f -
+
+                                        for image in frontend gateway auth profile accounts balancer notifications deposits transfers analytics ai admin; do
+                                            case "$image" in
+                                                frontend) deployment=frontend ;;
+                                                gateway) deployment=api-gateway ;;
+                                                *) deployment="$image-service" ;;
+                                            esac
+
+                                            kubectl -n "$KUBE_NAMESPACE" set image deployment/$deployment \\
+                                                "$deployment=$ECR_REGISTRY/banking-app/$image:$IMAGE_TAG"
+
+                                            kubectl -n "$KUBE_NAMESPACE" rollout status deployment/$deployment --timeout=180s
+                                        done
+
+                                        kubectl -n "$KUBE_NAMESPACE" get svc
+                                        '''
+
+                                }
+
+                        }
+
+                }
 
         stage('Cleanup Docker Images') {
 

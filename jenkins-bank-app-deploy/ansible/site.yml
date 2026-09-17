@@ -1,0 +1,162 @@
+---
+- name: Configure Jenkins controller
+  hosts: jenkins
+  become: true
+  gather_facts: true
+
+  vars:
+    jenkins_plugins:
+      - workflow-aggregator
+      - git
+      - github
+      - docker-workflow
+      - docker-plugin
+      - aws-credentials
+      - pipeline-aws
+      - amazon-ecr
+      - sonar
+      - kubernetes
+      - kubernetes-cli
+      - credentials-binding
+      - email-ext
+      - ansicolor
+      - timestamper
+      - warnings-ng
+      - build-name-setter
+
+  tasks:
+    - name: Install Jenkins and pipeline dependencies
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - git
+          - gnupg
+          - openjdk-21-jre
+          - docker.io
+          - unzip
+          - nodejs
+          - npm
+        state: present
+        update_cache: true
+
+    - name: Download AWS CLI v2 installer
+      ansible.builtin.get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: '0644'
+
+    - name: Unarchive AWS CLI v2 installer
+      ansible.builtin.unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: true
+        creates: /tmp/aws
+
+    - name: Install AWS CLI v2
+      ansible.builtin.command:
+        cmd: /tmp/aws/install --update
+      args:
+        creates: /usr/local/bin/aws
+
+    - name: Ensure apt keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Remove stale Jenkins source list if present
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/jenkins.list
+        state: absent
+
+    - name: Download Jenkins repository key
+      ansible.builtin.get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /etc/apt/keyrings/jenkins-keyring.asc
+        mode: '0644'
+
+    - name: Configure Jenkins apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        filename: jenkins
+        state: present
+
+    - name: Install Jenkins
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+        update_cache: true
+
+    - name: Add Jenkins to the Docker group
+      ansible.builtin.user:
+        name: jenkins
+        groups: docker
+        append: true
+
+    - name: Install kubectl
+      ansible.builtin.get_url:
+        url: https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+
+    - name: Enable and start Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Enable and restart Jenkins after Docker group change
+      ansible.builtin.service:
+        name: jenkins
+        state: restarted
+        enabled: true
+
+    - name: Check whether Jenkins plugin CLI is available
+      ansible.builtin.command: which jenkins-plugin-cli
+      register: jenkins_plugin_cli_check
+      failed_when: false
+      changed_when: false
+
+    - name: Get latest Jenkins plugin manager release metadata
+      when: jenkins_plugin_cli_check.rc != 0
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/jenkinsci/plugin-installation-manager-tool/releases/latest
+        return_content: true
+        headers:
+          Accept: application/vnd.github+json
+      register: plugin_manager_release
+
+    - name: Install Jenkins plugin manager CLI when packaged binary is missing
+      when: jenkins_plugin_cli_check.rc != 0
+      block:
+        - name: Set plugin manager version
+          ansible.builtin.set_fact:
+            jenkins_plugin_manager_version: "{{ plugin_manager_release.json.tag_name | default('2.15.0') }}"
+
+        - name: Download Jenkins plugin manager JAR
+          ansible.builtin.get_url:
+            url: "https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/{{ jenkins_plugin_manager_version }}/jenkins-plugin-manager-{{ jenkins_plugin_manager_version }}.jar"
+            dest: /usr/local/bin/jenkins-plugin-manager.jar
+            mode: '0644'
+
+        - name: Create jenkins-plugin-cli wrapper
+          ansible.builtin.copy:
+            dest: /usr/local/bin/jenkins-plugin-cli
+            mode: '0755'
+            content: |
+              #!/bin/bash
+              exec java -jar /usr/local/bin/jenkins-plugin-manager.jar "$@"
+
+    - name: Install Jenkins plugins
+      ansible.builtin.command:
+        cmd: "jenkins-plugin-cli --plugins {{ jenkins_plugins | join(' ') }}"
+      register: plugin_install
+      changed_when: "'No plugins to install' not in plugin_install.stdout"
+      notify: Restart Jenkins
+
+  handlers:
+    - name: Restart Jenkins
+      ansible.builtin.service:
+        name: jenkins
+        state: restarted

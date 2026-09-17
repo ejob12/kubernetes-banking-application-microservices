@@ -1,0 +1,75 @@
+---
+- name: Configure SonarQube server
+  hosts: sonarqube
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - unzip
+          - gnupg
+          - git
+          - jq
+          - openjdk-21-jre
+          - docker.io
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create SonarQube data directory
+      ansible.builtin.file:
+        path: /opt/sonarqube/data
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create SonarQube logs directory
+      ansible.builtin.file:
+        path: /opt/sonarqube/logs
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create SonarQube extensions directory
+      ansible.builtin.file:
+        path: /opt/sonarqube/extensions
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Run SonarQube container
+      community.docker.docker_container:
+        name: sonarqube
+        image: sonarqube:community
+        state: started
+        restart_policy: always
+        published_ports:
+          - "9000:9000"
+        volumes:
+          - /opt/sonarqube/data:/opt/sonarqube/data
+          - /opt/sonarqube/logs:/opt/sonarqube/logs
+          - /opt/sonarqube/extensions:/opt/sonarqube/extensions
+        env:
+          SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+
+    - name: Wait for SonarQube UI to become available
+      ansible.builtin.uri:
+        url: http://localhost:9000
+        status_code: 200
+        timeout: 20
+      register: sonarqube_status
+      retries: 30
+      delay: 20
+      until: sonarqube_status.status == 200
